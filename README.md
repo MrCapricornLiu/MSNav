@@ -1,6 +1,8 @@
 # MSNav
 
-Official code implementation of **[MSNav: Zero-Shot Vision-and-Language Navigation with Dynamic Memory and LLM Spatial Reasoning](https://arxiv.org/abs/2508.16654)**.
+Official code implementation of **[MSNav: Zero-Shot Vision-and-Language Navigation with Dynamic Memory and LLM Spatial Reasoning](https://ieeexplore.ieee.org/abstract/document/11463005)**.
+
+This project is led and maintained by [Chenghao Liu](https://github.com/MrCapricornLiu).
 
 A Vision-and-Language Navigation (VLN) system that leverages GPT models for intelligent navigation with dynamic map pruning and adaptive path planning.
 
