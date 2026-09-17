@@ -1,147 +1,186 @@
-# MSNav
+# 🚗 MSNav: Zero-Shot Vision-and-Language Navigation with Dynamic Memory and LLM Spatial Reasoning
 
-Official code implementation of **[MSNav: Zero-Shot Vision-and-Language Navigation with Dynamic Memory and LLM Spatial Reasoning](https://ieeexplore.ieee.org/abstract/document/11463005)**.
+[![Paper](https://img.shields.io/badge/Paper-arXiv%3A2508.16654-b31b1b.svg)](https://arxiv.org/abs/2508.16654)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
-This project is led and maintained by [Chenghao Liu](https://github.com/MrCapricornLiu).
+Official implementation of **MSNav**, a zero-shot vision-and-language navigation framework combining dynamic map memory, spatial reasoning, and LLM-based action planning.
 
-A Vision-and-Language Navigation (VLN) system that leverages GPT models for intelligent navigation with dynamic map pruning and adaptive path planning.
+Project and repository led and maintained by [Chenghao Liu](https://github.com/MrCapricornLiu).
 
-## Overview
+Our paper has been accepted by **ICASSP 2026** 🎉. Read it on [IEEE Xplore](https://ieeexplore.ieee.org/abstract/document/11463005) or [arXiv](https://arxiv.org/abs/2508.16654).
 
-MSNav is an advanced navigation agent that combines vision-language understanding with dynamic environment mapping. The system uses GPT-4o to interpret navigation instructions and make intelligent decisions about movement through complex environments.
+## 🔎 Overview
 
-### Key Features
+MSNav brings together three complementary modules for long-horizon navigation:
 
-- **GPT-powered Navigation**: Uses GPT-4o for environment understanding and path planning
-- **Dynamic Map Pruning**: Intelligently prunes navigation maps to maintain efficiency
-- **Multi-modal Input**: Processes both visual observations and textual instructions
-- **Configurable Parameters**: Extensive customization options for different scenarios
+- **Memory:** Maintains a topological map and selectively prunes historical nodes to retain useful navigation context.
+- **Spatial:** Uses Qwen-Spatial (Qwen-Sp), fine-tuned from Qwen3-4B, to infer relevant objects and destination layouts.
+- **Decision:** Combines visual observations, navigation history, map memory, and spatial cues for GPT-based action planning.
 
-## Installation
+> **Note:** This repository contains navigation, spatial inference, and evaluation code. Datasets, observation images, and fine-tuned checkpoints must be prepared separately.
 
-1. Clone the repository:
+## 📦 Repository Structure
+
+```text
+MSNav/
+├── GPT/
+│   ├── api.py                       # Vision-language API client
+│   └── one_stage_prompt_manager.py  # Navigation prompts and spatial cues
+├── Spatial/scripts/
+│   ├── infer_instr_obj.py           # Instruction-to-object inference
+│   ├── infer_instr_sr.py            # Destination spatial reasoning
+│   └── eval_obj_metrics.py          # Object extraction evaluation
+├── vln/
+│   ├── main_gpt.py                  # Navigation evaluation entry point
+│   ├── gpt_agent.py                 # Navigation agent and map pruning
+│   ├── env.py                       # Matterport3D navigation environment
+│   └── parser.py                    # Command-line configuration
+├── utils/                          # Data loading and logging
+├── scripts/run.sh                  # Experiment configuration reference
+├── figs/placeholder_pruned.png      # Placeholder for pruned observations
+└── requirements.txt                # Core Python dependencies
+```
+
+## ⚙️ Setup
+
+### 1. Install Dependencies
+
 ```bash
-git clone <repository-url>
+git clone https://github.com/MrCapricornLiu/MSNav.git
 cd MSNav
-```
-
-2. Install dependencies:
-```bash
 pip install -r requirements.txt
+pip install h5py
 ```
 
-3. Configure GPT API:
-   - Edit `GPT/api.py` and set your OpenAI API key and base URL
-   - Replace `"xxx"` placeholders with your actual credentials
+**Additional requirements:**
 
+- **Navigation:** Matterport3D Simulator with `MatterSim` Python bindings installed in the same environment.
+- **Spatial inference:** PyTorch, Transformers, ModelScope Swift (`ms-swift`), and their dependencies.
 
-## Usage
+The pinned `requirements.txt` covers core navigation dependencies, not the simulator or spatial-model stack.
 
-### Dataset Support
+### 2. Prepare Data
 
-The system supports Room-to-Room (R2R) navigation datasets. 
+Prepare R2R connectivity graphs, Matterport3D scan data, processed navigation annotations, and RGB observations. The navigation code expects the following layout:
 
-### Basic Usage
+```text
+DATA_ROOT/
+├── R2R/
+│   ├── connectivity/
+│   └── annotations/
+└── Matterport3D/
+    └── v1_unzip_scans/
 
-Run the navigation system using the provided script:
-
-```bash
-bash scripts/run.sh
+IMG_ROOT/
+└── <scan_id>/<viewpoint_id>/<view_index>.jpg
 ```
 
-### Custom Configuration
+Use `--root_dir` for `DATA_ROOT`, `--img_root` for `IMG_ROOT`, and `--split` for the processed annotation JSON. The example below uses a filename containing `processed` to select the processed-data loading branch.
 
-The system supports extensive configuration through command-line arguments:
+### 3. Configure Local Paths
+
+- [`GPT/api.py`](GPT/api.py): Set `generation_key` and the API `base_url`.
+- [`vln/gpt_agent.py`](vln/gpt_agent.py): Point `self.placeholder_image_data` to the included `figs/placeholder_pruned.png`.
+- [`Spatial/scripts/`](Spatial/scripts/): Set model checkpoints and input/output paths before spatial inference.
+
+Keep API credentials local; do not commit them to the repository.
+
+## 🧪 Navigation Evaluation
+
+### Run Navigation
+
+From the repository root, run the following command after completing setup. This example evaluates one instruction with map pruning enabled:
 
 ```bash
-python vln/main_gpt.py \
-    --root_dir /your/dataset/root/location \
-    --img_root /your/dataset/location \
-    --split MapGPT_72_scenes_processed_1.json \
+python -m vln.main_gpt \
+    --root_dir /path/to/datasets \
+    --img_root /path/to/RGB_observations \
+    --split /path/to/MapGPT_72_scenes_processed_1.json \
     --start 0 \
     --end 1 \
-    --output_dir /your/output/location \
+    --output_dir output/msnav \
+    --dataset r2r \
+    --batch_size 1 \
     --llm gpt-4o \
-    --enable_map_pruning \
-    --extended_instruction
+    --response_format json \
+    --max_action_len 22 \
+    --max_tokens 1000 \
+    --save_pred \
+    --enable_map_pruning
 ```
 
-### Key Parameters
+> **Important:** `--start` is inclusive and `--end` is exclusive. Supply an explicit, valid `--end` for the current processed-data loader, and keep `--batch_size 1`.
 
-- `--llm`: GPT model to use (e.g., gpt-4o)
-- `--max_action_len`: Maximum number of actions per instruction
-- `--enable_map_pruning`: Enable dynamic map pruning for efficiency
-- `--temperature`: Control randomness in GPT responses (0.0-1.0)
-- `--extended_instruction`: Use extended instruction format
+### Add Spatial Cues
 
-## Project Structure
+Append these arguments to the navigation command, continuing the preceding line with `\`:
 
-```
-MSNav/
-├── GPT/                    # GPT API and prompt management
-│   ├── api.py             # OpenAI API integration
-│   └── one_stage_prompt_manager.py
-├── Spatial/               # Spatial reasoning and object analysis module
-│   └── scripts/           # Processing scripts for spatial understanding
-│       ├── eval_obj_metrics.py    # Object detection metrics evaluation
-│       ├── infer_instr_obj.py        # Object inference from instructions
-│       ├── infer_instr_sr.py         # Spatial layout reasoning
-├── vln/                   # Core navigation logic
-│   ├── main_gpt.py       # Main entry point
-│   ├── gpt_agent.py      # GPT-powered navigation agent
-│   ├── env.py            # Environment interface
-│   └── ...
-├── utils/                 # Utility functions
-├── scripts/               # Execution scripts
-└── requirements.txt       # Python dependencies
+```bash
+    --extended_instruction \
+    --extended_instr_file /path/to/extended_instructions.json
 ```
 
-## Configuration
+The extended JSON must contain matching `scan`, `path_id`, and `instruction` fields, together with `final_destination_spatial_relations`.
 
-### Map Pruning Parameters
+### Evaluation Outputs
 
-- `--map_pruning_step_threshold`: Steps before a node is considered 'old'
-- `--pruning_keep_recent_steps`: Window of recent steps to preserve
-- `--pruning_start_step`: When to start pruning
-- `--pruning_max_nodes_per_step`: Maximum nodes to prune per step
+Outputs are saved under `--output_dir`:
 
-### Scoring Weights
+- **Trajectories and per-instruction metrics:** `preds/case_InstrID_*.json` (requires `--save_pred`).
+- **Aggregate navigation metrics:** `logs/valid.txt`.
 
-- `--w_time`: Time weight in scoring
-- `--w_degree`: Degree weight in scoring  
-- `--w_frontier`: Frontier weight in scoring
-- `--w_dist`: Distance weight in scoring
+### Map Memory Configuration
 
-## Spatial Module
+| Argument | Purpose |
+| --- | --- |
+| `--enable_map_pruning` | Enable dynamic map pruning. |
+| `--pruning_start_step` | Set the first step at which pruning is considered. |
+| `--map_pruning_step_threshold` | Set the minimum age for candidate nodes. |
+| `--pruning_keep_recent_steps` | Protect recently visited nodes. |
+| `--pruning_max_nodes_per_step` | Limit the number of nodes pruned per step. |
+| `--w_time`, `--w_degree`, `--w_frontier` | Weight node age, connectivity, and unexplored neighbors. |
+| `--enable_graph_distance_pruning`, `--w_dist` | Enable and weight the graph-distance component. |
+| `--log_pruning_scores` | Log candidate scores for inspection. |
 
-The Spatial module provides advanced spatial reasoning and object analysis capabilities for Vision-and-Language Navigation tasks. It uses fine-tuned Qwen3-4B to understand spatial relationships and identify relevant objects from navigation instructions.
+See [`vln/parser.py`](vln/parser.py) for defaults and additional options. The API client currently uses a fixed temperature of `0`; there is no `--temperature` command-line option.
 
-### Key Components
+## 🧩 Spatial Reasoning
 
-- **Object Inference (`infer_instr_obj.py`)**: You can use finetuned models to analyze navigation instructions to extract:
-  - `direct_obj`: Objects explicitly mentioned in instructions (sorted by importance)
-  - `potential_obj`: Other relevant objects that might be encountered (sorted by relevance)
+The spatial scripts use Qwen3-4B and configurable local checkpoints to extract objects and infer destination layouts.
 
-- **Spatial Layout Reasoning (`infer_instr_sr.py`)**: You can use finetuned models to infer spatial layout of destinations by generating:
-  - Destination descriptions based on instructions
-  - Spatial arrangement of key objects at the destination
+| Script | Purpose |
+| --- | --- |
+| [`infer_instr_obj.py`](Spatial/scripts/infer_instr_obj.py) | Extract `direct_obj` and `potential_obj` lists from navigation instructions. |
+| [`infer_instr_sr.py`](Spatial/scripts/infer_instr_sr.py) | Generate destination descriptions and spatial-layout cues. |
+| [`eval_obj_metrics.py`](Spatial/scripts/eval_obj_metrics.py) | Evaluate object extraction with F1, NDCG, and weighted metrics. |
 
-- **Evaluation Metrics (`eval_obj_metrics.py`)**: You can compute comprehensive metrics including:
-  - Direct object F1 score
-  - Potential object F1 score
-  - Total F1 score
-  - NDCG (Normalized Discounted Cumulative Gain)
-  - Weighted scoring
+After configuring the checkpoint and data paths in the inference scripts:
 
+```bash
+python Spatial/scripts/infer_instr_obj.py
+python Spatial/scripts/infer_instr_sr.py
+```
 
-### Usage
+The evaluation script retains local experiment configuration; review its model-loading and output-path settings before use. Qwen-Sp weights and I-O-S data are not bundled with the code.
 
-The Spatial module integrates with the main navigation system to provide enhanced spatial understanding. Configure your model checkpoints and API keys in the respective script files before running.
+## 📖 Citation
 
+If you use MSNav in your research, please cite our paper:
 
+```bibtex
+@inproceedings{liu2026msnav,
+  title     = {{MSNav}: Zero-Shot Vision-and-Language Navigation with Dynamic Memory and {LLM} Spatial Reasoning},
+  author    = {Liu, Chenghao and Zhou, Zhimu and Zhang, Jiachen and Zhang, Minghao and Huang, Songfang and Duan, Huiling},
+  booktitle = {2026 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP)},
+  year      = {2026},
+  url       = {https://ieeexplore.ieee.org/abstract/document/11463005}
+}
+```
 
-## Requirements
+## License
 
-- Python 3.7+
-- OpenAI API access
-- Required packages listed in `requirements.txt`
+This project is licensed under the [MIT License](./LICENSE).
+
+## 🙏 Acknowledgements
+
+We thank the authors of [NavGPT](https://github.com/GengzeZhou/NavGPT), [MapGPT](https://github.com/chen-judge/MapGPT), and [InstructNav](https://github.com/LYX0501/InstructNav) for their pioneering work in language-guided navigation. Their research and open-source contributions provide valuable foundations and inspiration for MSNav. We sincerely appreciate their efforts to advance the community.
